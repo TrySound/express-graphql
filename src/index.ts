@@ -462,6 +462,7 @@ export function graphqlHTTP(options: Options): Middleware {
 
     if (isAsyncIterable(executeResult)) {
       response.setHeader('Content-Type', 'multipart/mixed; boundary="-"');
+      response.write('\r\n---\r\n');
       sendPartialResponse(pretty, response, formattedResult);
       try {
         for await (let payload of executeResult) {
@@ -489,7 +490,6 @@ export function graphqlHTTP(options: Options): Middleware {
           hasNext: false,
         });
       }
-      response.write('\r\n-----\r\n');
       response.end();
       finishedIterable = true;
       return;
@@ -625,16 +625,14 @@ function sendPartialResponse(
 ): void {
   const json = JSON.stringify(result, null, pretty ? 2 : 0);
   const chunk = Buffer.from(json, 'utf8');
-  const data = [
-    '',
-    '---',
-    'Content-Type: application/json; charset=utf-8',
-    'Content-Length: ' + String(chunk.length),
-    '',
-    chunk,
-    '',
-  ].join('\r\n');
-  response.write(data);
+  const data = ['Content-Type: application/json; charset=utf-8', '', chunk];
+  // @ts-expect-error
+  if (result.hasNext === true) {
+    data.push('---\r\n');
+  } else {
+    data.push('-----\r\n');
+  }
+  response.write(data.join('\r\n'));
   // flush response if compression middleware is used
   if (
     typeof response.flush === 'function' &&
